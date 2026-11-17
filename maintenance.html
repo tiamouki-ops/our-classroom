@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#071108" />
+  <title>점검 중 · 그때 우리 교실</title>
+  <style>
+    :root { color-scheme: dark; --green:#8df39a; --dim:#6fae78; --black:#071108; }
+    * { box-sizing: border-box; }
+    html,body { margin:0; min-height:100%; }
+    body { display:grid; place-items:center; padding:24px 14px; background:#101713; color:var(--green); font-family:Consolas,"Courier New",monospace; }
+    .monitor { width:min(100%,900px); background:#242b25; border:9px solid #777970; border-radius:24px; padding:18px; box-shadow:0 20px 55px #0008, inset 0 0 0 3px #414940; }
+    .screen { position:relative; min-height:480px; overflow:hidden; border:4px solid #101c11; border-radius:12px; background:var(--black); padding:clamp(20px,4vw,42px); box-shadow: inset 0 0 80px #15372190; }
+    .screen:after { content:""; pointer-events:none; position:absolute; inset:0; opacity:.12; background:repeating-linear-gradient(transparent 0 3px,#000 3px 6px); }
+    .brand { font-size:clamp(12px,2vw,16px); color:var(--dim); margin:0 0 32px; }
+    .terminal { margin:0; font-size:clamp(14px,2.2vw,20px); line-height:1.75; white-space:pre-wrap; overflow-wrap:anywhere; }
+    .caret { display:inline-block; width:.62em; height:1.1em; vertical-align:-.16em; background:var(--green); animation:blink 1s steps(1) infinite; }
+    .message { border-top:1px dashed #497b50; margin-top:22px; padding-top:22px; font-family:system-ui,"Malgun Gothic",sans-serif; line-height:1.8; }
+    h1 { font-size:clamp(20px,3vw,29px); line-height:1.4; margin:0 0 10px; }
+    p { margin:8px 0; }
+    .note { color:var(--dim); font-size:14px; }
+    .actions { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-top:25px; }
+    .button { font:700 15px system-ui,"Malgun Gothic",sans-serif; text-decoration:none; color:#092211; background:var(--green); border:2px solid var(--green); padding:11px 17px; border-radius:6px; cursor:pointer; }
+    .button.secondary { background:transparent; color:var(--green); }
+    .button:hover,.button:focus-visible { outline:2px solid #d6ffe0; outline-offset:3px; }
+    .footer { color:#a7c4aa; font:12px system-ui,"Malgun Gothic",sans-serif; text-align:center; margin-top:15px; }
+    @keyframes blink {50%{opacity:0}}
+    @media (prefers-reduced-motion:reduce) {.caret{animation:none}}
+    @media (max-width:600px){.monitor{padding:9px;border-width:6px;border-radius:13px}.screen{min-height:430px;padding:20px 16px}.brand{margin-bottom:22px}}
+  </style>
+</head>
+<body>
+  <main>
+    <div class="monitor">
+      <div class="screen">
+        <p class="brand">RETRO PC 386 · 그때 우리 교실 / SYSTEM MAINTENANCE</p>
+        <pre id="terminal" class="terminal" aria-label="DOS PARK 프로그램을 재현한 화면">C:\&gt;<span class="caret" aria-hidden="true"></span></pre>
+        <section class="message" aria-labelledby="notice-title">
+          <h1 id="notice-title">친구야, 지금은 잠깐 쉬는 시간이야! 🏫</h1>
+          <p>그때 우리 교실과 추억의 마을을 새 단장하고 있어.</p>
+          <p>점검이 끝나면 다시 교실에서 만나자. 네 자리는 그대로 남겨둘게. ㅋㅋ</p>
+          <p class="note">※ 점검 종료 시각은 아직 안내되지 않았습니다.</p>
+          <div class="actions">
+            <a class="button" href="/" aria-label="교실 메인 화면 다시 접속하기">교실로 다시 가보기</a>
+            <button class="button secondary" type="button" id="replay">PARK 다시 보기</button>
+          </div>
+        </section>
+      </div>
+    </div>
+    <div class="footer">이 화면은 실제 디스크 명령을 실행하지 않는 레트로 연출입니다.</div>
+  </main>
+  <script>
+    (function () {
+      const terminal = document.getElementById('terminal');
+      const replay = document.getElementById('replay');
+      const lines = [
+        'C:\\>PARK.EXE',
+        '',
+        'PARK Utility  /  RETRO MODE',
+        'Parking hard disk heads...',
+        'Heads parked successfully.',
+        '',
+        'C:\\>MAINTENANCE',
+        'SYSTEM STATUS: UNDER MAINTENANCE',
+        '',
+        'C:\\>'
+      ];
+      let timer = null;
+      function renderAll() {
+        terminal.textContent = lines.join('\n');
+        const cursor = document.createElement('span');
+        cursor.className = 'caret';
+        cursor.setAttribute('aria-hidden','true');
+        terminal.appendChild(cursor);
+      }
+      function play() {
+        if (timer !== null) clearInterval(timer);
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { renderAll(); return; }
+        terminal.textContent = '';
+        let i = 0;
+        timer = setInterval(() => {
+          if (i >= lines.length) { clearInterval(timer); timer = null; renderAll(); return; }
+          terminal.textContent += (i ? '\n' : '') + lines[i++];
+        }, 350);
+      }
+      replay.addEventListener('click', play);
+      play();
+    })();
+  </script>
+</body>
+</html>
