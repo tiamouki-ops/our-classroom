@@ -1,23 +1,218 @@
+
 <!DOCTYPE html>
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>그때 우리 교실</title>
+<title>그때 우리 교실 - 추억의 마을</title>
 <style>
-body {
-  background: #f1e5cc;
-  font-family: sans-serif;
-  text-align: center;
-  padding: 80px 12px;
-}
-h1 { color: #315c40; }
+*{box-sizing:border-box}
+body{margin:0;background:#202d32;color:#fff;
+ font-family:system-ui,sans-serif;text-align:center}
+header{padding:12px;background:#304b40}
+h2{margin:0;font-size:22px}
+p{margin:6px;font-size:13px}
+#game{display:block;width:min(100%,960px);
+ aspect-ratio:16/9;margin:12px auto;
+ border:5px solid #b98d5b;image-rendering:pixelated;
+ background:#82bb76}
+#status{min-height:24px;color:#ffe7a5}
+.controls{display:grid;grid-template-columns:repeat(3,52px);
+ gap:5px;justify-content:center;margin:12px}
+button{height:45px;font-size:22px;border:0;
+ border-radius:8px;background:#d6bb87;color:#302519;
+ touch-action:none}
+.action{font-size:14px;background:#88c19e}
 </style>
 </head>
 <body>
-<h1>🏫 그때 우리 교실</h1>
-<p>그 시절, 우리 반은 아직 그대로야.</p>
-<p>레트로 픽셀 마을 V0.1</p>
+<header>
+<h2>🏫 그때 우리 교실</h2>
+<p>추억의 마을 V0.1 · 방향키로 산책하기</p>
+</header>
+<canvas id="game" width="960" height="540"></canvas>
+<div id="status">방향키 또는 WASD로 움직여 보세요.</div>
+<div class="controls">
+<div></div><button data-key="ArrowUp">▲</button><div></div>
+<button data-key="ArrowLeft">◀</button>
+<button data-key="ArrowDown">▼</button>
+<button data-key="ArrowRight">▶</button>
+<div></div><button class="action" id="action">SPACE</button><div></div>
+</div>
+<script>
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
+ctx.imageSmoothingEnabled=false;
+const status=document.getElementById("status");
+
+const W=2048,H=1536;
+const keys=new Set();
+const player={x:1020,y:740,size:22,speed:185,face:0,step:0};
+const buildings=[
+ {name:"우리집",x:150,y:185,w:340,h:245,
+  wall:"#edcf9a",roof:"#a95342",door:"#794e30"},
+ {name:"추억의 학교",x:1050,y:145,w:650,h:350,
+  wall:"#d6a27c",roof:"#a85143",door:"#527b8c"},
+ {name:"음악가게",x:160,y:920,w:340,h:245,
+  wall:"#e9c7a3",roof:"#ac666d",door:"#795b8c"},
+ {name:"학교앞 문구사",x:805,y:930,w:385,h:245,
+  wall:"#f0d1a0",roof:"#68988c",door:"#ae6441"},
+ {name:"오락실",x:1470,y:920,w:350,h:250,
+  wall:"#a19acc",roof:"#574a91",door:"#393267"}
+];
+const trees=[];
+let seed=17;
+function rnd(){
+ seed=(seed*1664525+1013904223)>>>0;
+ return seed/4294967296;
+}
+const road=(x,y)=>(
+ (y>640&&y<835)||
+ (x>325&&x<410)||
+ (x>975&&x<1080)||
+ (x>1600&&x<1690)
+);
+function overlaps(x,y,b,pad=0){
+ return x>b.x-pad&&x<b.x+b.w+pad&&
+        y>b.y-pad&&y<b.y+b.h+pad;
+}
+for(let i=0;i<130;i++){
+ const x=50+rnd()*(W-100),y=60+rnd()*(H-120);
+ if(road(x,y)||buildings.some(b=>overlaps(x,y,b,80)))continue;
+ trees.push({x,y,s:24+rnd()*12});
+}
+function blocked(x,y){
+ const r=player.size/2;
+ if(x<r||y<r||x>W-r||y>H-r)return true;
+ if(buildings.some(b=>(
+  x+r>b.x&&x-r<b.x+b.w&&
+  y+r>b.y+24&&y-r<b.y+b.h
+ )))return true;
+ return trees.some(t=>Math.hypot(x-t.x,y-t.y)<t.s*.57+r);
+}
+function move(dx,dy,dt){
+ if(!dx&&!dy)return;
+ const n=Math.hypot(dx,dy);
+ dx/=n;dy/=n;
+ const vx=dx*player.speed*dt,vy=dy*player.speed*dt;
+ if(!blocked(player.x+vx,player.y))player.x+=vx;
+ if(!blocked(player.x,player.y+vy))player.y+=vy;
+ player.face=dx<0?-1:dx>0?1:player.face;
+ player.step+=dt*10;
+}
+function rect(x,y,w,h,c){
+ ctx.fillStyle=c;ctx.fillRect(Math.round(x),Math.round(y),w,h);
+}
+function text(t,x,y,size=20,color="#fff"){
+ ctx.font=`bold ${size}px sans-serif`;
+ ctx.textAlign="center";
+ ctx.lineWidth=4;ctx.strokeStyle="#40362c";
+ ctx.strokeText(t,x,y);
+ ctx.fillStyle=color;ctx.fillText(t,x,y);
+}
+function drawBuilding(b){
+ rect(b.x+8,b.y+35,b.w,b.h,"#51694d");
+ rect(b.x,b.y+30,b.w,b.h-30,b.wall);
+ rect(b.x-12,b.y,b.w+24,68,b.roof);
+ for(let k=0;k<3;k++){
+  const xx=b.x+35+k*(b.w-95)/3;
+  rect(xx,b.y+110,48,55,"#f8f0b6");
+  rect(xx+21,b.y+110,6,55,"#b68b62");
+ }
+ const cx=b.x+b.w/2;
+ rect(cx-34,b.y+b.h-82,68,82,b.door);
+ rect(cx-6,b.y+b.h-74,12,70,"#c6ad7c");
+ rect(cx-85,b.y+50,170,43,"#66503b");
+ text(b.name,cx,b.y+80,21);
+}
+function drawTree(t){
+ rect(t.x-7,t.y-1,14,29,"#8d6445");
+ rect(t.x-t.s,t.y-t.s,t.s*2,t.s*1.8,"#426f44");
+ rect(t.x-t.s+5,t.y-t.s+5,t.s*1.5,t.s,"#6da655");
+}
+function drawPlayer(){
+ const x=Math.round(player.x),y=Math.round(player.y);
+ const bob=Math.sin(player.step)*2;
+ rect(x-10,y-6+bob,20,24,"#315fba");
+ rect(x-13,y-26+bob,26,23,"#f5c7a0");
+ rect(x-15,y-31+bob,30,11,"#292521");
+ rect(x-7,y-16+bob,4,4,"#292521");
+ rect(x+5,y-16+bob,4,4,"#292521");
+ rect(x-9,y+16+bob,7,8,"#383638");
+ rect(x+3,y+16+bob,7,8,"#383638");
+ text("나",x,y-40,17);
+}
+function nearest(){
+ let best=null,dist=1e9;
+ for(const b of buildings){
+  const dx=player.x-(b.x+b.w/2);
+  const dy=player.y-(b.y+b.h+12);
+  const d=Math.hypot(dx,dy);
+  if(d<dist){dist=d;best=b;}
+ }
+ return dist<115?best:null;
+}
+function interact(){
+ const b=nearest();
+ status.textContent=b?`${b.name} 입장 기능은 다음 버전에 추가할게!`:
+ "건물 출입문 앞으로 이동해 봐.";
+}
+let last=performance.now();
+function frame(now){
+ const dt=Math.min((now-last)/1000,.04);
+ last=now;
+ let dx=0,dy=0;
+ if(keys.has("ArrowLeft")||keys.has("a"))dx--;
+ if(keys.has("ArrowRight")||keys.has("d"))dx++;
+ if(keys.has("ArrowUp")||keys.has("w"))dy--;
+ if(keys.has("ArrowDown")||keys.has("s"))dy++;
+ move(dx,dy,dt);
+ const cameraX=Math.max(0,Math.min(W-canvas.width,
+  player.x-canvas.width/2));
+ const cameraY=Math.max(0,Math.min(H-canvas.height,
+  player.y-canvas.height/2));
+ ctx.clearRect(0,0,canvas.width,canvas.height);
+ ctx.save();ctx.translate(-Math.round(cameraX),-Math.round(cameraY));
+ rect(0,0,W,H,"#87b879");
+ for(let y=0;y<H;y+=64)
+  for(let x=0;x<W;x+=64){
+   if((x+y)/64%2===0)rect(x,y,64,64,"#81b274");
+  }
+ rect(0,640,W,195,"#d5bc93");
+ rect(325,0,85,H,"#d5bc93");
+ rect(975,0,105,H,"#d5bc93");
+ rect(1600,0,90,H,"#d5bc93");
+ for(let i=0;i<W;i+=80){
+  rect(i,731,35,5,"#f2e4c7");
+ }
+ for(const b of buildings)drawBuilding(b);
+ for(const t of trees)drawTree(t);
+ drawPlayer();
+ ctx.restore();
+ const b=nearest();
+ if(b&&(!dx&&!dy))status.textContent=
+  `${b.name} 앞이야! Space를 누르면 안내가 나와.`;
+ requestAnimationFrame(frame);
+}
+window.addEventListener("keydown",e=>{
+ if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight",
+      " ","Space"].includes(e.key))e.preventDefault();
+ keys.add(e.key.toLowerCase().startsWith("arrow")?
+  e.key:e.key.toLowerCase());
+ if(e.code==="Space"&&!e.repeat)interact();
+});
+window.addEventListener("keyup",e=>{
+ keys.delete(e.key.startsWith("Arrow")?e.key:e.key.toLowerCase());
+});
+window.addEventListener("blur",()=>keys.clear());
+document.querySelectorAll("[data-key]").forEach(b=>{
+ const key=b.dataset.key;
+ b.onpointerdown=e=>{e.preventDefault();keys.add(key);b.setPointerCapture(e.pointerId)};
+ b.onpointerup=b.onpointercancel=()=>keys.delete(key);
+});
+document.getElementById("action").onclick=interact;
+requestAnimationFrame(frame);
+</script>
 </body>
 </html>
   
