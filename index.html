@@ -1,0 +1,504 @@
+
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>그때 우리 교실 V0.4</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#27352f;color:#fff;
+font-family:system-ui,sans-serif;text-align:center}
+header{padding:12px;background:#365845}
+h2{margin:0}p{margin:5px;font-size:13px}
+canvas{display:block;width:min(96%,960px);
+aspect-ratio:16/9;margin:12px auto;
+border:5px solid #b98c59;image-rendering:pixelated;
+background:#81b776}
+#status{min-height:28px;color:#ffe6a0}
+.controls{display:grid;grid-template-columns:repeat(3,56px);
+gap:6px;justify-content:center;margin:12px}
+button{height:48px;font-size:23px;border:0;
+border-radius:7px;background:#d6bd8c;
+touch-action:none}
+#action{font-size:12px;background:#8bc9aa}
+</style>
+</head>
+<body>
+<header>
+<h2>🏫 그때 우리 교실</h2>
+<p>추억의 마을 V0.4 · 학교와 교실 탐험</p>
+</header>
+<canvas id="game" width="960" height="540"></canvas>
+<div id="status">방향키로 우리집을 찾아가 보세요!</div>
+<div class="controls">
+<div></div><button data-key="ArrowUp">▲</button><div></div>
+<button data-key="ArrowLeft">◀</button>
+<button data-key="ArrowDown">▼</button>
+<button data-key="ArrowRight">▶</button>
+<div></div><button id="action">SPACE</button><div></div>
+</div>
+<script>
+const canvas=document.querySelector("#game");
+const ctx=canvas.getContext("2d");
+const status=document.querySelector("#status");
+ctx.imageSmoothingEnabled=false;
+
+const W=2048,H=1536;
+const keys=new Set();
+let scene="village",last=performance.now();
+const player={x:1020,y:740,speed:185,step:0};
+let previousPosition={x:320,y:485};
+let schoolReturnPosition={x:1375,y:525};
+
+const buildings=[
+{name:"우리집",x:150,y:185,w:340,h:245,
+ roof:"#a95443",wall:"#e4c89c"},
+{name:"추억의 학교",x:1050,y:145,w:650,h:350,
+ roof:"#aa5145",wall:"#d9a580"},
+{name:"음악가게",x:160,y:920,w:340,h:245,
+ roof:"#a86a76",wall:"#e6c5a9"},
+{name:"학교앞 문구사",x:805,y:930,w:385,h:245,
+ roof:"#659a88",wall:"#edd4a7"},
+{name:"오락실",x:1470,y:920,w:350,h:250,
+ roof:"#66539b",wall:"#b4a9d9"}
+];
+
+let seed=17;
+ 
+function rand(){
+seed=(seed*1664525+1013904223)>>>0;
+return seed/4294967296;
+}
+
+const trees=[];
+function road(x,y){
+return (y>640&&y<835)||
+(x>325&&x<410)||
+(x>975&&x<1080)||
+(x>1600&&x<1690);
+}
+for(let i=0;i<130;i++){
+const x=50+rand()*(W-100);
+const y=60+rand()*(H-120);
+if(road(x,y))continue;
+if(buildings.some(b=>
+ x>b.x-80&&x<b.x+b.w+80&&
+ y>b.y-80&&y<b.y+b.h+80))continue;
+trees.push({x,y,r:24+rand()*12});
+}
+
+const classroomDesks = [];
+for (const y of [190,305]) for (const x of [145,385,625]) classroomDesks.push({x,y,w:170,h:65});
+const hallwayObjects=[{x:80,y:250,w:120,h:74},{x:810,y:260,w:70,h:130}];
+
+const furniture=[
+{x:100,y:110,w:145,h:75,name:"침대",color:"#8ca9c6"},
+{x:665,y:100,w:170,h:70,name:"책장",color:"#93633c"},
+{x:110,y:335,w:130,h:85,name:"TV",color:"#797b80"},
+{x:620,y:320,w:145,h:75,name:"책상",color:"#af8153"},
+{x:380,y:210,w:180,h:100,name:"탁자",color:"#b18b62"}
+];
+
+function rect(x,y,w,h,color){
+ctx.fillStyle=color;
+ctx.fillRect(Math.round(x),Math.round(y),w,h);
+}
+function label(value,x,y,size=20,color="#fff"){
+ctx.font=`bold ${size}px sans-serif`;
+ctx.textAlign="center";
+ctx.lineWidth=4;
+ctx.strokeStyle="#493729";
+ctx.strokeText(value,x,y);
+ctx.fillStyle=color;
+ctx.fillText(value,x,y);
+}
+function collision(x,y){
+const r=11;
+if(scene==="home"){
+if(x<58+r||x>902-r||y<65+r||y>490-r)return true;
+return furniture.some(f=>
+x+r>f.x&&x-r<f.x+f.w&&
+y+r>f.y&&y-r<f.y+f.h);
+}
+if(scene==="hallway"){
+  if(x<42+r||x>918-r||y<75+r||y>500-r)return true;
+  return hallwayObjects.some(o=>x+r>o.x&&x-r<o.x+o.w&&y+r>o.y&&y-r<o.y+o.h);
+}
+if(scene==="classroom"){
+  if(x<45+r||x>915-r||y<75+r||y>500-r)return true;
+  return classroomDesks.some(o=>x+r>o.x&&x-r<o.x+o.w&&y+r>o.y&&y-r<o.y+o.h)
+    || (x+r>427&&x-r<533&&y+r>105&&y-r<156);
+}
+if(x<r||x>W-r||y<r||y>H-r)return true;
+if(buildings.some(b=>
+x+r>b.x&&x-r<b.x+b.w&&
+y+r>b.y+24&&y-r<b.y+b.h))return true;
+return trees.some(t=>
+Math.hypot(x-t.x,y-t.y)<t.r*.57+r);
+}
+function move(dx,dy,dt){
+if (dialogOpen) return;
+if(!dx&&!dy)return;
+const n=Math.hypot(dx,dy);
+const vx=dx/n*player.speed*dt;
+const vy=dy/n*player.speed*dt;
+if(!collision(player.x+vx,player.y))player.x+=vx;
+if(!collision(player.x,player.y+vy))player.y+=vy;
+player.step+=dt*10;
+}
+
+function nearDoor(){
+  if(scene==="home") return Math.hypot(player.x-480,player.y-463)<75 ? "exit-home" : null;
+  if(scene==="hallway") {
+    if(Math.hypot(player.x-480,player.y-466)<76) return "exit-school";
+    if(Math.hypot(player.x-740,player.y-168)<90) return "enter-classroom";
+    return null;
+  }
+  if(scene==="classroom") return Math.hypot(player.x-480,player.y-455)<76 ? "exit-classroom" : null;
+  for(const b of buildings){
+    const doorX=b.x+b.w/2, doorY=b.y+b.h+18;
+    if(Math.hypot(player.x-doorX,player.y-doorY)<100) return b.name;
+  }
+  return null;
+}
+
+/* ===== V0.3 이설이 NPC ===== */
+const iseol = {
+  x: 930,
+  y: 740,
+  name: "이설이"
+};
+
+let dialogOpen = false;
+
+const answers = [
+  ["여긴 어떤 곳이야?",
+   "여기는 그때 우리 교실! 옛날 학교와 동네를 다시 만나는 추억의 마을이야. ㅋㅋ"],
+  ["어떻게 움직여?",
+   "방향키 또는 WASD로 이동하고, Space로 물건이나 사람과 상호작용하면 돼!"],
+  ["우리집은 어디야?",
+   "마을 왼쪽 위에 있어. 현관 앞에서 Space를 누르면 들어갈 수 있어."],
+  ["학교에서는 뭘 해?",
+   "학교 정문에서 Space를 눌러 복도로 들어가 봐! 복도 오른쪽 위 교실 문에서도 Space를 누르면 돼. 짝꿍 채팅은 다음에 만들 거야!"],
+  ["문구사에는 뭐가 있어?",
+   "추억의 과자와 장난감, 집을 꾸밀 소품을 준비하고 있어!"]
+];
+
+const dialog = document.createElement("div");
+dialog.id = "iseol-dialog";
+dialog.style.cssText = `
+  display:none;position:fixed;inset:0;
+  background:#0009;z-index:100;
+  align-items:center;justify-content:center;
+  padding:16px;
+`;
+
+dialog.innerHTML = `
+  <section style="
+    background:#f2dfb6;color:#463320;
+    border:5px solid #77563c;border-radius:12px;
+    width:min(440px,100%);padding:18px;
+    text-align:left;max-height:85vh;overflow:auto">
+    <h2 style="margin:0 0 12px">🌷 도우미 이설이</h2>
+    <p id="iseol-answer" style="font-size:15px">
+      어서 와~ 친구야! 무엇이 궁금해?
+    </p>
+    <div id="iseol-questions"></div>
+    <button id="iseol-close" style="
+      width:100%;margin-top:12px;
+      font-size:15px">대화 끝내기 (ESC)</button>
+  </section>
+`;
+
+document.body.appendChild(dialog);
+
+const questionBox =
+  document.getElementById("iseol-questions");
+
+answers.forEach(([question, answer]) => {
+  const button = document.createElement("button");
+  button.textContent = question;
+  button.style.cssText = `
+    display:block;width:100%;margin:6px 0;
+    font-size:14px;min-height:38px;
+    height:auto;padding:8px;
+  `;
+  button.onclick = () => {
+    document.getElementById("iseol-answer")
+      .textContent = answer;
+  };
+  questionBox.appendChild(button);
+});
+
+function nearIseol() {
+  return scene === "village" &&
+    Math.hypot(
+      player.x - iseol.x,
+      player.y - iseol.y
+    ) < 65;
+}
+
+function openIseol() {
+  dialogOpen = true;
+  keys.clear();
+  dialog.style.display = "flex";
+  document.getElementById("iseol-answer")
+    .textContent = "어서 와~ 친구야! 무엇이 궁금해?";
+}
+
+function closeIseol() {
+  dialogOpen = false;
+  dialog.style.display = "none";
+}
+
+document.getElementById("iseol-close")
+  .onclick = closeIseol;
+
+function drawIseol() {
+  const x = iseol.x, y = iseol.y;
+
+  rect(x-10,y-5,20,25,"#57846b");
+  rect(x-13,y-27,26,24,"#f2c49e");
+  rect(x-16,y-34,32,15,"#70442e");
+  rect(x-8,y-18,4,4,"#302521");
+  rect(x+5,y-18,4,4,"#302521");
+  rect(x-9,y+19,8,7,"#43352c");
+  rect(x+2,y+19,8,7,"#43352c");
+
+  label("이설이",x,y-43,18,"#fff3ad");
+  if (nearIseol()) {
+    label("SPACE 대화",x,y-65,15);
+  }
+}
+/* ===== NPC 코드 끝 ===== */
+  
+function action(){
+  if(dialogOpen) return;
+  if(nearIseol()) { openIseol(); return; }
+  const place=nearDoor();
+  if(scene==="home") {
+    if(place==="exit-home") {
+      scene="village"; player.x=previousPosition.x;player.y=previousPosition.y;
+      status.textContent="우리 동네로 돌아왔어!";
+    } else status.textContent="현관 앞으로 이동해 봐.";
+    return;
+  }
+  if(scene==="hallway") {
+    if(place==="exit-school") {
+      scene="village";player.x=schoolReturnPosition.x;player.y=schoolReturnPosition.y;
+      status.textContent="학교 밖 마을로 나왔어!";
+    } else if(place==="enter-classroom") {
+      scene="classroom";player.x=480;player.y=428;
+      status.textContent="추억의 교실에 들어왔어! 2인용 책상이 보이지?";
+    } else status.textContent="교실 문이나 학교 출입구 근처로 가 봐.";
+    return;
+  }
+  if(scene==="classroom") {
+    if(place==="exit-classroom") {
+      scene="hallway";player.x=740;player.y=232;
+      status.textContent="학교 복도로 돌아왔어!";
+    } else status.textContent="교실 출입구 근처로 가 봐.";
+    return;
+  }
+  if(place==="우리집") {
+    previousPosition={x:player.x,y:player.y};
+    scene="home";player.x=480;player.y=415;
+    status.textContent="어서 와! 여기가 우리집이야.";
+  } else if(place==="추억의 학교") {
+    schoolReturnPosition={x:player.x,y:player.y};
+    scene="hallway";player.x=480;player.y=414;
+    status.textContent="학교 복도에 들어왔어! 오른쪽 위 2반 교실로 가 봐.";
+  } else if(place) {
+    status.textContent=place+"은 다음 버전에 열릴 예정이야!";
+  } else status.textContent="건물 현관 앞에서 Space를 눌러 봐.";
+}
+
+function drawBuilding(b){
+rect(b.x+9,b.y+40,b.w,b.h,"#58704f");
+rect(b.x,b.y+30,b.w,b.h-30,b.wall);
+rect(b.x-12,b.y,b.w+24,68,b.roof);
+for(let i=0;i<3;i++){
+const x=b.x+35+i*(b.w-95)/3;
+rect(x,b.y+110,48,55,"#f8eab4");
+rect(x+21,b.y+110,6,55,"#b28e69");
+}
+const cx=b.x+b.w/2;
+rect(cx-34,b.y+b.h-82,68,82,"#76513a");
+rect(cx-6,b.y+b.h-74,12,70,"#c9b38f");
+rect(cx-85,b.y+50,170,43,"#675039");
+label(b.name,cx,b.y+79,21);
+}
+function drawTree(t){
+rect(t.x-7,t.y,14,30,"#896044");
+rect(t.x-t.r,t.y-t.r,t.r*2,t.r*1.8,"#477748");
+rect(t.x-t.r+6,t.y-t.r+5,t.r*1.5,t.r,"#70a65b");
+}
+
+function drawPlayer(){
+const x=Math.round(player.x),y=Math.round(player.y);
+const bob=Math.sin(player.step)*2;
+rect(x-10,y-5+bob,20,24,"#3569bc");
+rect(x-13,y-26+bob,26,23,"#f3c6a1");
+rect(x-15,y-31+bob,30,11,"#302522");
+rect(x-7,y-16+bob,4,4,"#302522");
+rect(x+5,y-16+bob,4,4,"#302522");
+rect(x-9,y+17+bob,7,8,"#383638");
+rect(x+3,y+17+bob,7,8,"#383638");
+label("나",x,y-40,17);
+}
+
+function drawVillage(){
+rect(0,0,W,H,"#87b879");
+for(let y=0;y<H;y+=64)
+for(let x=0;x<W;x+=64)
+if((x+y)/64%2===0)
+rect(x,y,64,64,"#81b274");
+
+rect(0,640,W,195,"#d5bc93");
+rect(325,0,85,H,"#d5bc93");
+rect(975,0,105,H,"#d5bc93");
+rect(1600,0,90,H,"#d5bc93");
+
+for(let x=0;x<W;x+=80)
+rect(x,732,35,5,"#f2e4c7");
+
+buildings.forEach(drawBuilding);
+trees.forEach(drawTree);
+drawIseol();
+drawPlayer();
+}
+
+function drawHome(){
+rect(0,0,960,540,"#b58b60");
+rect(58,65,844,425,"#d5b78c");
+for(let y=75;y<490;y+=55)
+rect(60,y,840,3,"#c9a57b");
+rect(58,65,844,18,"#7c5940");
+rect(58,65,18,425,"#7c5940");
+rect(884,65,18,425,"#7c5940");
+rect(58,490,844,16,"#7c5940");
+
+rect(350,110,250,55,"#a4cadd");
+rect(360,117,230,40,"#d5eaf0");
+
+for(const f of furniture){
+rect(f.x+7,f.y+8,f.w,f.h,"#9d805e");
+rect(f.x,f.y,f.w,f.h,f.color);
+label(f.name,f.x+f.w/2,f.y+f.h/2+7,19);
+}
+rect(412,474,136,31,"#74513b");
+label("현관 출구",480,468,18);
+label("🏠 우리집",480,43,28);
+drawPlayer();
+}
+
+function drawHallway(){
+  rect(0,0,960,540,"#9b927e");
+  rect(42,75,876,425,"#dcc5a0");
+  for(let y=87;y<500;y+=40)rect(43,y,874,2,"#c4ad87");
+  for(let x=48;x<920;x+=64)rect(x,76,2,424,"#ceb895");
+  rect(42,62,876,28,"#7d5c44");
+  rect(42,75,17,425,"#7d5c44");rect(902,75,17,425,"#7d5c44");
+  rect(42,498,876,14,"#7d5c44");
+  rect(94,105,290,93,"#527056");label("추억의 학교",239,150,26);
+  rect(615,86,250,38,"#7f4e31");label("6학년 2반",740,112,21);
+  rect(679,125,122,51,"#a77b53");rect(726,128,30,45,"#f2e0b6");
+  rect(80,250,120,74,"#8c724e");label("신발장",140,298,18);
+  rect(810,260,70,130,"#9a7851");label("사물함",845,337,14);
+  rect(402,487,156,24,"#744f38");label("학교 밖",480,477,18);
+  drawPlayer();
+}
+function drawClassroom(){
+  rect(0,0,960,540,"#b69b79");
+  rect(45,75,870,425,"#deb98d");
+  for(let y=80;y<500;y+=36)rect(46,y,868,3,"#d1a97a");
+  rect(45,63,870,22,"#855b3e");rect(45,75,15,425,"#855b3e");
+  rect(900,75,15,425,"#855b3e");rect(45,499,870,13,"#855b3e");
+  rect(230,85,500,84,"#375e43");label("그때 우리 교실 · 6학년 2반",480,130,27);
+  rect(428,105,104,52,"#986d47");label("교탁",480,140,18);
+  for(let n=0;n<3;n++){
+    rect(70,128+n*96,42,58,"#9dccdd");
+    rect(88,128+n*96,5,58,"#fff3dc");
+  }
+  for(const d of classroomDesks){
+    rect(d.x+12,d.y+54,62,17,"#695039");
+    rect(d.x+97,d.y+54,62,17,"#695039");
+    rect(d.x,d.y,d.w,d.h-6,"#ac7948");
+    rect(d.x+6,d.y+6,d.w-12,8,"#c59559");
+    rect(d.x+d.w/2-2,d.y+3,4,d.h-10,"#805431");
+    rect(d.x+25,d.y+22,35,23,"#efe0bb");
+    rect(d.x+111,d.y+22,35,23,"#efe0bb");
+  }
+  rect(412,487,136,24,"#74513b");label("복도로",480,477,18);
+  label("2인용 책상 · 착석은 다음 버전",480,53,16,"#ffedbf");
+  drawPlayer();
+}
+
+function frame(now){
+const dt=Math.min((now-last)/1000,.04);
+last=now;
+let dx=0,dy=0;
+if(keys.has("ArrowLeft")||keys.has("a"))dx--;
+if(keys.has("ArrowRight")||keys.has("d"))dx++;
+if(keys.has("ArrowUp")||keys.has("w"))dy--;
+if(keys.has("ArrowDown")||keys.has("s"))dy++;
+move(dx,dy,dt);
+
+ctx.clearRect(0,0,960,540);
+if(scene==="village"){
+const cx=Math.max(0,Math.min(W-960,player.x-480));
+const cy=Math.max(0,Math.min(H-540,player.y-270));
+ctx.save();
+ctx.translate(-Math.round(cx),-Math.round(cy));
+drawVillage();
+ctx.restore();
+}else if(scene==="home"){
+  drawHome();
+}else if(scene==="hallway"){
+  drawHallway();
+}else if(scene==="classroom"){
+  drawClassroom();
+}
+
+const place=nearDoor();
+if(place&&!dialogOpen&&(!dx&&!dy)){
+const hints={"exit-home":"현관 앞이야! Space를 누르면 밖으로 나가.","exit-school":"학교 출입구야! Space를 누르면 마을로 돌아가.","enter-classroom":"6학년 2반 교실 문이야! Space를 눌러봐.","exit-classroom":"교실 문이야! Space를 누르면 복도로 나가."};
+status.textContent=hints[place] || place+" 앞이야! Space를 눌러 봐.";
+}
+requestAnimationFrame(frame);
+}
+window.addEventListener("keydown",e=>{
+if (e.key === "Escape" && dialogOpen) {
+  e.preventDefault();
+  closeIseol();
+  return;
+}
+if (dialogOpen) {
+  if (e.code === "Space") e.preventDefault();
+  return;
+}
+ 
+if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","Space"]
+.includes(e.code)||e.key===" ")e.preventDefault();
+keys.add(e.key.startsWith("Arrow")?e.key:e.key.toLowerCase());
+if(e.code==="Space"&&!e.repeat)action();
+});
+window.addEventListener("keyup",e=>{
+keys.delete(e.key.startsWith("Arrow")?e.key:e.key.toLowerCase());
+});
+window.addEventListener("blur",()=>keys.clear());
+document.querySelectorAll("[data-key]").forEach(b=>{
+const key=b.dataset.key;
+b.onpointerdown=e=>{
+e.preventDefault();
+keys.add(key);
+b.setPointerCapture(e.pointerId);
+};
+b.onpointerup=b.onpointercancel=()=>keys.delete(key);
+});
+document.querySelector("#action").onclick=action;
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
