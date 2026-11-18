@@ -64,6 +64,7 @@ const buildings=[
 ];
 
 let seed=17;
+ 
 function rand(){
 seed=(seed*1664525+1013904223)>>>0;
 return seed/4294967296;
@@ -132,6 +133,8 @@ if(!collision(player.x,player.y+vy))player.y+=vy;
 player.step+=dt*10;
 }
 
+if (dialogOpen) return;
+  
 function nearDoor(){
 if(scene==="home"){
 return Math.hypot(player.x-480,player.y-463)<75
@@ -146,6 +149,117 @@ return b.name;
 return null;
 }
 
+
+/* ===== V0.3 이설이 NPC ===== */
+const iseol = {
+  x: 930,
+  y: 740,
+  name: "이설이"
+};
+
+let dialogOpen = false;
+
+const answers = [
+  ["여긴 어떤 곳이야?",
+   "여기는 그때 우리 교실! 옛날 학교와 동네를 다시 만나는 추억의 마을이야. ㅋㅋ"],
+  ["어떻게 움직여?",
+   "방향키 또는 WASD로 이동하고, Space로 물건이나 사람과 상호작용하면 돼!"],
+  ["우리집은 어디야?",
+   "마을 왼쪽 위에 있어. 현관 앞에서 Space를 누르면 들어갈 수 있어."],
+  ["학교에서는 뭘 해?",
+   "앞으로 교실에서 짝꿍과 나란히 앉아 대화할 수 있게 만들 거야!"],
+  ["문구사에는 뭐가 있어?",
+   "추억의 과자와 장난감, 집을 꾸밀 소품을 준비하고 있어!"]
+];
+
+const dialog = document.createElement("div");
+dialog.id = "iseol-dialog";
+dialog.style.cssText = `
+  display:none;position:fixed;inset:0;
+  background:#0009;z-index:100;
+  align-items:center;justify-content:center;
+  padding:16px;
+`;
+
+dialog.innerHTML = `
+  <section style="
+    background:#f2dfb6;color:#463320;
+    border:5px solid #77563c;border-radius:12px;
+    width:min(440px,100%);padding:18px;
+    text-align:left;max-height:85vh;overflow:auto">
+    <h2 style="margin:0 0 12px">🌷 도우미 이설이</h2>
+    <p id="iseol-answer" style="font-size:15px">
+      어서 와~ 친구야! 무엇이 궁금해?
+    </p>
+    <div id="iseol-questions"></div>
+    <button id="iseol-close" style="
+      width:100%;margin-top:12px;
+      font-size:15px">대화 끝내기 (ESC)</button>
+  </section>
+`;
+
+document.body.appendChild(dialog);
+
+const questionBox =
+  document.getElementById("iseol-questions");
+
+answers.forEach(([question, answer]) => {
+  const button = document.createElement("button");
+  button.textContent = question;
+  button.style.cssText = `
+    display:block;width:100%;margin:6px 0;
+    font-size:14px;min-height:38px;
+    height:auto;padding:8px;
+  `;
+  button.onclick = () => {
+    document.getElementById("iseol-answer")
+      .textContent = answer;
+  };
+  questionBox.appendChild(button);
+});
+
+function nearIseol() {
+  return scene === "village" &&
+    Math.hypot(
+      player.x - iseol.x,
+      player.y - iseol.y
+    ) < 65;
+}
+
+function openIseol() {
+  dialogOpen = true;
+  keys.clear();
+  dialog.style.display = "flex";
+  document.getElementById("iseol-answer")
+    .textContent = "어서 와~ 친구야! 무엇이 궁금해?";
+}
+
+function closeIseol() {
+  dialogOpen = false;
+  dialog.style.display = "none";
+}
+
+document.getElementById("iseol-close")
+  .onclick = closeIseol;
+
+function drawIseol() {
+  const x = iseol.x, y = iseol.y;
+
+  rect(x-10,y-5,20,25,"#57846b");
+  rect(x-13,y-27,26,24,"#f2c49e");
+  rect(x-16,y-34,32,15,"#70442e");
+  rect(x-8,y-18,4,4,"#302521");
+  rect(x+5,y-18,4,4,"#302521");
+  rect(x-9,y+19,8,7,"#43352c");
+  rect(x+2,y+19,8,7,"#43352c");
+
+  label("이설이",x,y-43,18,"#fff3ad");
+  if (nearIseol()) {
+    label("SPACE 대화",x,y-65,15);
+  }
+}
+/* ===== NPC 코드 끝 ===== */
+  
 function action(){
 const place=nearDoor();
 if(scene==="home"){
@@ -159,6 +273,13 @@ status.textContent="현관 앞으로 이동해 봐.";
 }
 return;
 }
+
+if (dialogOpen) return;
+if (nearIseol()) {
+  openIseol();
+  return;
+}
+ 
 if(place==="우리집"){
 previousPosition={x:player.x,y:player.y};
 scene="home";
@@ -192,6 +313,9 @@ rect(t.x-7,t.y,14,30,"#896044");
 rect(t.x-t.r,t.y-t.r,t.r*2,t.r*1.8,"#477748");
 rect(t.x-t.r+6,t.y-t.r+5,t.r*1.5,t.r,"#70a65b");
 }
+
+drawIseol();
+ 
 function drawPlayer(){
 const x=Math.round(player.x),y=Math.round(player.y);
 const bob=Math.sin(player.step)*2;
@@ -280,6 +404,16 @@ status.textContent=scene==="home"
 requestAnimationFrame(frame);
 }
 window.addEventListener("keydown",e=>{
+if (e.key === "Escape" && dialogOpen) {
+  e.preventDefault();
+  closeIseol();
+  return;
+}
+if (dialogOpen) {
+  if (e.code === "Space") e.preventDefault();
+  return;
+}
+ 
 if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","Space"]
 .includes(e.code)||e.key===" ")e.preventDefault();
 keys.add(e.key.startsWith("Arrow")?e.key:e.key.toLowerCase());
